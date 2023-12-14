@@ -1,0 +1,5 @@
+.terraform/
+.terraform.lock.hcl
+.id_azure
+terraform.tfstate*
+terraform.tfvars
