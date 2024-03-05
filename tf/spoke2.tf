@@ -154,7 +154,7 @@ resource "azurerm_linux_virtual_machine" "spoke2_vm" {
 
   admin_ssh_key {
     username   = "adminuser"
-    public_key = file("~/.ssh/id_azure.pub")
+    public_key = file(var.vm_ssh_key_file)
   }
 
   disable_password_authentication = true
