@@ -16,10 +16,10 @@ class MyServer(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(bytes("<html><head><title>Test WebServer</title></head>", "utf-8"))
+        self.wfile.write(bytes("<html><head><title> %s </title></head>" % hostName, "utf-8"))
         self.wfile.write(bytes("<body>", "utf-8"))
-        self.wfile.write(bytes("<p>Request: %s</p>" % self.path, "utf-8"))
-        self.wfile.write(bytes("<p>Request: %s</p>" % self.path, "utf-8"))
+        self.wfile.write(bytes("<p>Request: %s</p>" % self.requestline, "utf-8"))
+        self.wfile.write(bytes("<p>Client: %s</p>" % self.client_address, "utf-8"))
         self.wfile.write(bytes("</body></html>", "utf-8"))
 
 if __name__ == "__main__":   
