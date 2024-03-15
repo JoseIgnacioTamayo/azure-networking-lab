@@ -94,6 +94,17 @@ resource "azurerm_network_security_group" "default_spoke3" {
   }
 }
 
+resource "azurerm_virtual_network_peering" "spoke3_to_hub" {
+  name                         = "peer-spoke3-to-hub"
+  resource_group_name          = data.azurerm_resource_group.rg.name
+  virtual_network_name         = azurerm_virtual_network.spoke3.name
+  remote_virtual_network_id    = azurerm_virtual_network.hub.id
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+  allow_gateway_transit        = false
+  # cannot have UseRemoteGateway flag set to true because remote virtual network has no GWs
+  use_remote_gateways = false
+}
 
 resource "azurerm_virtual_network_peering" "hub_to_spoke3" {
   name                         = "peer-hub-to-spoke3"
