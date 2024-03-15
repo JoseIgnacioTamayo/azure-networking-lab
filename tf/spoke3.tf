@@ -39,16 +39,6 @@ resource "azurerm_subnet_network_security_group_association" "spoke3_subnet1" {
   network_security_group_id = azurerm_network_security_group.default_spoke3.id
 }
 
-resource "azurerm_subnet_route_table_association" "spoke3_appgw" {
-  subnet_id      = azurerm_subnet.spoke3_appgw.id
-  route_table_id = azurerm_route_table.spoke3_appgw.id
-}
-
-resource "azurerm_subnet_network_security_group_association" "spoke3_appgw" {
-  subnet_id                 = azurerm_subnet.spoke3_appgw.id
-  network_security_group_id = azurerm_network_security_group.spoke3_appgw.id
-}
-
 resource "azurerm_route_table" "default_spoke3" {
   name                = "rt-default-spoke-3"
   location            = local.location
@@ -80,7 +70,7 @@ resource "azurerm_network_security_group" "default_spoke3" {
     destination_address_prefix = "VirtualNetwork"
   }
   security_rule {
-    name                         = "healthprobe-allow-in"
+    name                         = "http-allow-in"
     priority                     = 130
     direction                    = "Inbound"
     access                       = "Allow"
@@ -108,36 +98,6 @@ resource "azurerm_route_table" "spoke3_appgw" {
   location            = local.location
   resource_group_name = data.azurerm_resource_group.rg.name
 
-}
-
-resource "azurerm_network_security_group" "spoke3_appgw" {
-  name                = "nsg-appgw-spoke-3"
-  location            = local.location
-  resource_group_name = data.azurerm_resource_group.rg.name
-
-  security_rule {
-    name                       = "all-deny-in"
-    priority                   = 1000
-    direction                  = "Inbound"
-    access                     = "Deny"
-    protocol                   = "*"
-    source_port_range          = "*"
-    destination_port_range     = "*"
-    source_address_prefix      = "*"
-    destination_address_prefix = "VirtualNetwork"
-  }
-}
-
-resource "azurerm_virtual_network_peering" "spoke3_to_hub" {
-  name                         = "peer-spoke3-to-hub"
-  resource_group_name          = data.azurerm_resource_group.rg.name
-  virtual_network_name         = azurerm_virtual_network.spoke3.name
-  remote_virtual_network_id    = azurerm_virtual_network.hub.id
-  allow_virtual_network_access = true
-  allow_forwarded_traffic      = true
-  allow_gateway_transit        = false
-  # cannot have UseRemoteGateway flag set to true because remote virtual network has no GWs
-  use_remote_gateways = false
 }
 
 resource "azurerm_virtual_network_peering" "hub_to_spoke3" {
@@ -184,7 +144,7 @@ resource "azurerm_linux_virtual_machine" "spoke3" {
     azurerm_network_interface.spoke3.id,
   ]
 
-  custom_data = base64encode(file("./startup.sh"))
+  custom_data = base64encode(file("./startup_web.sh"))
 
   source_image_reference {
     publisher = "Canonical"
