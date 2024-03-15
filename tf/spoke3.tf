@@ -3,7 +3,8 @@
 The Subnet routes IPv4 to AzFw in Hub.
 
 VM accesible only for Bastion
-VM have IPv4 addresses
+TCP 8080-80802 accesible only for AppGw
+VM has IPv4 addresses
 
 */
 
@@ -22,7 +23,7 @@ resource "azurerm_subnet" "spoke3_subnet1" {
   address_prefixes     = ["10.0.3.0/26"]
 }
 
-resource "azurerm_subnet" "spoke3_appgw" {
+resource "azurerm_subnet" "AppGwSubnet" {
   name                 = "AppGwSubnet"
   virtual_network_name = azurerm_virtual_network.spoke3.name
   resource_group_name  = data.azurerm_resource_group.rg.name
@@ -49,7 +50,7 @@ resource "azurerm_route_table" "default_spoke3" {
     name                   = "defaultV4"
     address_prefix         = "0.0.0.0/0"
     next_hop_type          = "VirtualAppliance"
-    next_hop_in_ip_address = "10.0.0.132" # azurerm_firewall.fw.ip_configuration[0].private_ip_address
+    next_hop_in_ip_address = azurerm_firewall.fw.ip_configuration[0].private_ip_address
   }
 }
 
@@ -70,14 +71,14 @@ resource "azurerm_network_security_group" "default_spoke3" {
     destination_address_prefix = "VirtualNetwork"
   }
   security_rule {
-    name                         = "http-allow-in"
+    name                         = "appgw-allow-in"
     priority                     = 130
     direction                    = "Inbound"
     access                       = "Allow"
     protocol                     = "Tcp"
     source_port_range            = "*"
-    destination_port_ranges      = ["8080"]
-    source_address_prefix        = "AzureLoadBalancer"
+    destination_port_range       = "8080-8082"
+    source_address_prefixes        =  azurerm_subnet.AppGwSubnet.address_prefixes
     destination_address_prefix   = "VirtualNetwork"
   }
   security_rule {
@@ -93,12 +94,6 @@ resource "azurerm_network_security_group" "default_spoke3" {
   }
 }
 
-resource "azurerm_route_table" "spoke3_appgw" {
-  name                = "rt-appgw-spoke-3"
-  location            = local.location
-  resource_group_name = data.azurerm_resource_group.rg.name
-
-}
 
 resource "azurerm_virtual_network_peering" "hub_to_spoke3" {
   name                         = "peer-hub-to-spoke3"
@@ -144,7 +139,7 @@ resource "azurerm_linux_virtual_machine" "spoke3" {
     azurerm_network_interface.spoke3.id,
   ]
 
-  custom_data = base64encode(file("./startup_web.sh"))
+  custom_data = filebase64("./startup_web.sh")
 
   source_image_reference {
     publisher = "Canonical"

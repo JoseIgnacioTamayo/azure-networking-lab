@@ -1,14 +1,33 @@
-resource "azurerm_subnet_route_table_association" "spoke3_appgw" {
-  subnet_id      = azurerm_subnet.spoke3_appgw.id
-  route_table_id = azurerm_route_table.spoke3_appgw.id
+/* External IPv4 AppGW in Spoke vNet
+
+IPv4 Frontends listen for HTTP and HTTPS
+
+SSL Offload termination at AppGw
+HTTP to HTTPS permanent redirection at
+
+It probes the Backends on TCP 8082
+The Backends listen on TCP 8080-8082
+
+*/
+
+
+resource "azurerm_subnet_route_table_association" "AppGwSubnet" {
+  subnet_id      = azurerm_subnet.AppGwSubnet.id
+  route_table_id = azurerm_route_table.AppGwSubnet.id
 }
 
-resource "azurerm_subnet_network_security_group_association" "spoke3_appgw" {
-  subnet_id                 = azurerm_subnet.spoke3_appgw.id
-  network_security_group_id = azurerm_network_security_group.spoke3_appgw.id
+resource "azurerm_subnet_network_security_group_association" "AppGwSubnet" {
+  subnet_id                 = azurerm_subnet.AppGwSubnet.id
+  network_security_group_id = azurerm_network_security_group.AppGwSubnet.id
 }
 
-resource "azurerm_network_security_group" "spoke3_appgw" {
+resource "azurerm_route_table" "AppGwSubnet" {
+  name                = "rt-appgw-spoke-3"
+  location            = local.location
+  resource_group_name = data.azurerm_resource_group.rg.name
+}
+
+resource "azurerm_network_security_group" "AppGwSubnet" {
   name                = "nsg-appgw-spoke-3"
   location            = local.location
   resource_group_name = data.azurerm_resource_group.rg.name
@@ -22,11 +41,11 @@ resource "azurerm_network_security_group" "spoke3_appgw" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_ranges     = ["80", "443"]
-    destination_address_prefixes    = azurerm_subnet.spoke3_appgw.address_prefixes
+    destination_address_prefix = "VirtualNetwork"
     source_address_prefix        = "Internet"
   }
   security_rule {
-    name                       = "healtprobe-allow-in"
+    name                       = "appgwmngr-allow-in"
     priority                   = 120
     direction                  = "Inbound"
     access                     = "Allow"
@@ -89,12 +108,17 @@ resource "azurerm_user_assigned_identity" "spoke3_appgw" {
 
 locals {
   backend_address_pool_name      = "bckendpool-appgw-1"
-  frontend_ip_configuration_name = "frontend_appgw-1"
+  frontend_ip_configuration_name = "frontend_appgw-1" # SKU Standard_v2 is not allowed to change the name of an existing FrontendIpConfiguration
+  frontend_80_name                 = "http"
+  frontend_443_name                = "https"
   http_setting_name              = "httpsetting-appgw-1"
   https_listener_name            = "listen-https-appgw-1"
   http_listener_name             = "listen-http-appgw-1"
   request_routing_rule_name      = "rqstrouting-appgw-1"
   redirect_configuration_name    = "rqstredirect-appgw-1"
+  ssl_certificate_name           = "sslcert-1"
+  https_redirect_name = "redirect-appgw-1"
+  http_probe_name = "http-probe-1"
 }
 
 resource "azurerm_application_gateway" "spoke3_appgw" {
@@ -110,12 +134,16 @@ resource "azurerm_application_gateway" "spoke3_appgw" {
 
   gateway_ip_configuration {
     name      = "ip-configuration"
-    subnet_id = azurerm_subnet.spoke3_appgw.id
+    subnet_id = azurerm_subnet.AppGwSubnet.id
   }
 
   frontend_port {
-    name = "http"
+    name = local.frontend_80_name
     port = 80
+  }
+  frontend_port {
+    name = local.frontend_443_name
+    port = 443
   }
 
   frontend_ip_configuration {
@@ -130,25 +158,65 @@ resource "azurerm_application_gateway" "spoke3_appgw" {
   backend_http_settings {
     name                  = local.http_setting_name
     cookie_based_affinity = "Disabled"
-    path                  = "/"
     port                  = 8080
     protocol              = "Http"
-    request_timeout       = 20
+    request_timeout       = 30
+    probe_name = local.http_probe_name
+    pick_host_name_from_backend_address = true
   }
 
   http_listener {
     name                           = local.http_listener_name
     frontend_ip_configuration_name = local.frontend_ip_configuration_name
-    frontend_port_name             = "http"
+    frontend_port_name             = local.frontend_80_name
     protocol                       = "Http"
   }
+  http_listener {
+    name                           = local.https_listener_name
+    frontend_ip_configuration_name = local.frontend_ip_configuration_name
+    frontend_port_name             = local.frontend_443_name
+    protocol                       = "Https"
+    ssl_certificate_name = local.ssl_certificate_name
+  }
 
+  redirect_configuration {
+          include_path         = true
+          include_query_string = true
+          name                 = local.https_redirect_name
+          redirect_type        = "Permanent"
+          target_listener_name    = local.https_listener_name
+        }
   request_routing_rule {
-    name                       = local.request_routing_rule_name
-    priority                   = 9
+    name                       = "rule-appgw-1"
+    priority                   = 100
     rule_type                  = "Basic"
     http_listener_name         = local.http_listener_name
+    redirect_configuration_name = local.https_redirect_name
+  }
+  request_routing_rule {
+    name                       = "rule-appgw-2"
+    priority                   = 110
+    rule_type                  = "Basic"
+    http_listener_name         = local.https_listener_name
     backend_address_pool_name  = local.backend_address_pool_name
     backend_http_settings_name = local.http_setting_name
+  }
+
+   probe {
+    interval                                  = 30
+    minimum_servers                           = 1
+    name                                      = local.http_probe_name
+    pick_host_name_from_backend_http_settings = true
+    port                                      = 8082
+    path = "/health"
+    protocol                                  = "Http"
+    timeout                                   = 30
+    unhealthy_threshold                       = 3
+  }
+
+  ssl_certificate {
+    name = local.ssl_certificate_name
+    data = filebase64(var.ssl_cert_pfx_file)
+    password = var.ssl_cert_pfx_passwd
   }
 }
