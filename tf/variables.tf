@@ -13,14 +13,14 @@ variable "vm_ssh_key_file" {
   description = "Path to the Public RSA Key for SSH to VMs"
 }
 
-variable "ssl_cert_pfx_file"  {
+variable "ssl_cert_pfx_file" {
   type        = string
   description = "Path to the PFX Certificate for SSL"
-  default = null
+  default     = null
 }
 
-variable "ssl_cert_pfx_passwd"  {
+variable "ssl_cert_pfx_passwd" {
   type        = string
   description = "Password for the PFX Certificate for SSL"
-  default = null
+  default     = null
 }
