@@ -3,9 +3,18 @@
 IPv4 Frontends listen for HTTP and HTTPS
 
 SSL Offload termination at AppGw
-HTTP to HTTPS permanent redirection at
+
+HTTP to HTTPS permanent redirection. Keeps the path, resets the QueryString
+ > http://<ip>/some/path?nice_query=keep
+
+HTTP Rewrite rules with contidion
+ > /<path>?replace=me gets replaced by /<path>?replace=you
+
+HTTP Reroute to other Service
+ > /upload is directed to TCP 8081 with path /services/upload/v1
 
 It probes the Backends on TCP 8082
+
 The Backends listen on TCP 8080-8082
 
 */
@@ -40,9 +49,9 @@ resource "azurerm_network_security_group" "AppGwSubnet" {
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
-    destination_port_ranges     = ["80", "443"]
+    destination_port_ranges    = ["80", "443"]
     destination_address_prefix = "VirtualNetwork"
-    source_address_prefix        = "Internet"
+    source_address_prefix      = "Internet"
   }
   security_rule {
     name                       = "appgwmngr-allow-in"
@@ -56,14 +65,14 @@ resource "azurerm_network_security_group" "AppGwSubnet" {
     source_address_prefix      = "GatewayManager"
   }
   security_rule {
-    name                         = "lb-allow-in"
-    priority                     = 130
-    direction                    = "Inbound"
-    access                       = "Allow"
-    protocol                     = "Tcp"
-    source_port_range            = "*"
-    destination_port_range       = "*"
-    source_address_prefix        = "AzureLoadBalancer"
+    name                       = "lb-allow-in"
+    priority                   = 130
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "AzureLoadBalancer"
     destination_address_prefix = "*"
   }
   security_rule {
@@ -97,16 +106,19 @@ resource "azurerm_user_assigned_identity" "spoke3_appgw" {
 locals {
   backend_address_pool_name      = "bckendpool-appgw-1"
   frontend_ip_configuration_name = "frontend_appgw-1" # SKU Standard_v2 is not allowed to change the name of an existing FrontendIpConfiguration
-  frontend_80_name                 = "http"
-  frontend_443_name                = "https"
-  http_setting_name              = "httpsetting-appgw-1"
+  frontend_80_name               = "http"
+  frontend_443_name              = "https"
+  http8080_setting_name          = "httpsetting-appgw-1"
+  http8081_setting_name          = "httpsetting-appgw-2"
   https_listener_name            = "listen-https-appgw-1"
   http_listener_name             = "listen-http-appgw-1"
-  request_routing_rule_name      = "rqstrouting-appgw-1"
-  redirect_configuration_name    = "rqstredirect-appgw-1"
   ssl_certificate_name           = "sslcert-1"
-  https_redirect_name = "redirect-appgw-1"
-  http_probe_name = "http-probe-1"
+  https_redirect_name            = "redirect-appgw-1"
+  http_probe_name                = "http-probe-1"
+  rewrite_rule_set_name          = "rewrite-appgw-1"
+  rule_redirect_name             = "rule-appgw-1"
+  rule_servepaths_name           = "rule-appgw-2"
+  urlmap_name                    = "urlmap-appgw-1"
 }
 
 resource "azurerm_application_gateway" "spoke3_appgw" {
@@ -140,17 +152,27 @@ resource "azurerm_application_gateway" "spoke3_appgw" {
   }
 
   backend_address_pool {
-    name = local.backend_address_pool_name
+    name         = local.backend_address_pool_name
+    ip_addresses = azurerm_linux_virtual_machine.spoke3.private_ip_addresses
   }
 
   backend_http_settings {
-    name                  = local.http_setting_name
-    cookie_based_affinity = "Disabled"
-    port                  = 8080
-    protocol              = "Http"
-    request_timeout       = 30
-    probe_name = local.http_probe_name
+    name                                = local.http8080_setting_name
+    cookie_based_affinity               = "Disabled"
+    port                                = 8080
+    protocol                            = "Http"
+    request_timeout                     = 30
+    probe_name                          = local.http_probe_name
     pick_host_name_from_backend_address = true
+  }
+  backend_http_settings {
+    name                                = local.http8081_setting_name
+    cookie_based_affinity               = "Disabled"
+    port                                = 8081
+    protocol                            = "Http"
+    request_timeout                     = 30
+    pick_host_name_from_backend_address = true
+    path                                = "/services/upload/v1"
   }
 
   http_listener {
@@ -164,47 +186,79 @@ resource "azurerm_application_gateway" "spoke3_appgw" {
     frontend_ip_configuration_name = local.frontend_ip_configuration_name
     frontend_port_name             = local.frontend_443_name
     protocol                       = "Https"
-    ssl_certificate_name = local.ssl_certificate_name
+    ssl_certificate_name           = local.ssl_certificate_name
   }
 
   redirect_configuration {
-          include_path         = true
-          include_query_string = true
-          name                 = local.https_redirect_name
-          redirect_type        = "Permanent"
-          target_listener_name    = local.https_listener_name
-        }
+    include_path         = true
+    include_query_string = false
+    name                 = local.https_redirect_name
+    redirect_type        = "Found"
+    target_listener_name = local.https_listener_name
+  }
   request_routing_rule {
-    name                       = "rule-appgw-1"
-    priority                   = 100
-    rule_type                  = "Basic"
-    http_listener_name         = local.http_listener_name
+    name                        = local.rule_redirect_name
+    priority                    = 100
+    rule_type                   = "Basic"
+    http_listener_name          = local.http_listener_name
     redirect_configuration_name = local.https_redirect_name
   }
   request_routing_rule {
-    name                       = "rule-appgw-2"
-    priority                   = 110
-    rule_type                  = "Basic"
-    http_listener_name         = local.https_listener_name
-    backend_address_pool_name  = local.backend_address_pool_name
-    backend_http_settings_name = local.http_setting_name
+    name               = local.rule_servepaths_name
+    priority           = 110
+    rule_type          = "PathBasedRouting"
+    http_listener_name = local.https_listener_name
+    url_path_map_name  = local.urlmap_name
   }
 
-   probe {
+  rewrite_rule_set {
+    name = local.rewrite_rule_set_name
+    rewrite_rule {
+      name          = "rewrite-1"
+      rule_sequence = 100
+      condition {
+                  ignore_case = true
+                  pattern     = "replace=me"
+                  variable    = "var_query_string"
+                }
+      url {
+        components   = "query_string_only"
+        query_string = "replace=you"
+        reroute      = false
+      }
+    }
+  }
+
+  probe {
     interval                                  = 30
     minimum_servers                           = 1
     name                                      = local.http_probe_name
     pick_host_name_from_backend_http_settings = true
     port                                      = 8082
-    path = "/health"
+    path                                      = "/health"
     protocol                                  = "Http"
     timeout                                   = 30
     unhealthy_threshold                       = 3
   }
 
   ssl_certificate {
-    name = local.ssl_certificate_name
-    data = filebase64(var.ssl_cert_pfx_file)
+    name     = local.ssl_certificate_name
+    data     = filebase64(var.ssl_cert_pfx_file)
     password = var.ssl_cert_pfx_passwd
+  }
+
+  url_path_map {
+    default_backend_address_pool_name  = local.backend_address_pool_name
+    default_backend_http_settings_name = local.http8080_setting_name
+    default_rewrite_rule_set_name      = local.rewrite_rule_set_name
+    name                               = local.urlmap_name
+    path_rule {
+      backend_address_pool_name  = local.backend_address_pool_name
+      backend_http_settings_name = local.http8081_setting_name
+      name                       = "httpupload-appgw-1"
+      paths = [
+        "/upload",
+      ]
+    }
   }
 }

@@ -41,9 +41,9 @@ resource "azurerm_subnet_network_security_group_association" "spoke3_subnet1" {
 }
 
 resource "azurerm_route_table" "default_spoke3" {
-  name                = "rt-default-spoke-3"
-  location            = local.location
-  resource_group_name = data.azurerm_resource_group.rg.name
+  name                          = "rt-default-spoke-3"
+  location                      = local.location
+  resource_group_name           = data.azurerm_resource_group.rg.name
   disable_bgp_route_propagation = true
 
   route {
@@ -71,15 +71,15 @@ resource "azurerm_network_security_group" "default_spoke3" {
     destination_address_prefix = "VirtualNetwork"
   }
   security_rule {
-    name                         = "appgw-allow-in"
-    priority                     = 130
-    direction                    = "Inbound"
-    access                       = "Allow"
-    protocol                     = "Tcp"
-    source_port_range            = "*"
-    destination_port_range       = "8080-8082"
-    source_address_prefixes        =  azurerm_subnet.AppGwSubnet.address_prefixes
-    destination_address_prefix   = "VirtualNetwork"
+    name                       = "appgw-allow-in"
+    priority                   = 130
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "8080-8082"
+    source_address_prefixes    = azurerm_subnet.AppGwSubnet.address_prefixes
+    destination_address_prefix = "VirtualNetwork"
   }
   security_rule {
     name                       = "all-deny-in"
