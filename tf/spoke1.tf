@@ -86,8 +86,8 @@ resource "azurerm_network_security_group" "default_spoke1" {
     source_port_range       = "*"
     destination_port_ranges = ["8080", "80"]
     # All IP addresses or prefixes in the resource should belong to the same address family
-    source_address_prefix        = "VirtualNetwork" # A Rule can only have IPs of the same Protocol
-    destination_address_prefix   = "10.0.1.0/26"
+    source_address_prefix      = "VirtualNetwork" # A Rule can only have IPs of the same Protocol
+    destination_address_prefix = "10.0.1.0/26"
     # Cannot use 'azurerm_subnet.spoke1_subnet1.address_prefixes' because it has IPv4 and IPv6
   }
   security_rule {
@@ -102,15 +102,15 @@ resource "azurerm_network_security_group" "default_spoke1" {
     destination_address_prefix = "fd00:1::/64"
   }
   security_rule {
-    name                         = "healthprobe-allow-in"
-    priority                     = 130
-    direction                    = "Inbound"
-    access                       = "Allow"
-    protocol                     = "Tcp"
-    source_port_range            = "*"
-    destination_port_ranges      = ["8080"]
-    source_address_prefix        = "AzureLoadBalancer"
-    destination_address_prefix   = "VirtualNetwork"
+    name                       = "healthprobe-allow-in"
+    priority                   = 130
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_ranges    = ["8080"]
+    source_address_prefix      = "AzureLoadBalancer"
+    destination_address_prefix = "VirtualNetwork"
   }
   security_rule {
     name                       = "all-deny-in"

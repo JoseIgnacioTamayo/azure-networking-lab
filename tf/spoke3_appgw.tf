@@ -280,7 +280,7 @@ resource "azurerm_application_gateway" "spoke3_appgw" {
       backend_http_settings_name = local.http8081_setting_name
       name                       = "secret-appgw-1"
       # See spoke3_waf.tf
-      firewall_policy_id         = azurerm_web_application_firewall_policy.spoke3_appgw.id
+      firewall_policy_id = azurerm_web_application_firewall_policy.spoke3_appgw.id
       paths = [
         "/secret",
       ]
