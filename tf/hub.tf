@@ -22,7 +22,7 @@ resource "azurerm_subnet" "AzureBastionSubnet" {
   name                 = "AzureBastionSubnet"
   virtual_network_name = azurerm_virtual_network.hub.name
   resource_group_name  = data.azurerm_resource_group.rg.name
-  address_prefixes     = ["10.0.0.192/26"]  # Subnet must be /26 or larger
+  address_prefixes     = ["10.0.0.192/26"] # Subnet must be /26 or larger
 }
 
 resource "azurerm_subnet" "AzureFirewallSubnet" {
