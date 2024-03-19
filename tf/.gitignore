@@ -1,5 +1,6 @@
 .terraform/
 .terraform.lock.hcl
+.terraform.tfstate.lock.info
 .id_azure
 terraform.tfstate*
 terraform.tfvars
